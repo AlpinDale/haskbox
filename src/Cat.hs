@@ -1,7 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE QuasiQuotes #-}
-{-# LANGUAGE TemplateHaskell #-}
 
 module Cat
   ( CatOptions (..),
@@ -17,16 +15,12 @@ import Data.ByteString qualified as BS
 import Data.ByteString.Unsafe qualified as BU
 import Data.IORef
 import Data.Word (Word8)
-import Foreign.C.Error (throwErrnoIfMinus1_)
-import Foreign.C.Types (CInt (..))
-import GHC.IO.FD (FD (..))
-import GHC.IO.Handle.FD (handleToFd)
-import Language.C.Inline qualified as C
+import Foreign.Marshal.Alloc (allocaBytes)
+import Foreign.Ptr (Ptr, plusPtr)
+import GHC.IO.FD qualified as FD
 import System.IO
 import System.Posix.IO (OpenMode (..), closeFd, defaultFileFlags, openFd)
 import System.Posix.Types (Fd (..))
-
-C.include "<unistd.h>"
 
 data CatOptions = CatOptions
   { optNumberNonblank :: !Bool,
@@ -81,46 +75,52 @@ processFile opts state path
   | not (needsProcessing opts) = simpleCat path >> pure state
   | otherwise = processWithOptions opts state path
 
+bufSize :: Int
+bufSize = 131072 -- from GNU cat
+
 simpleCat :: FilePath -> IO ()
 simpleCat "-" = do
   hSetBinaryMode stdin True
   hSetBinaryMode stdout True
-  copyHandle stdin stdout
+  copyHandleRaw stdin stdout
 simpleCat path = do
   hSetBinaryMode stdout True
   fd <- openFd path ReadOnly defaultFileFlags
-  sendfileToStdout fd `finally` closeFd fd
+  copyFdToStdout fd `finally` closeFd fd
 
-sendfileToStdout :: Fd -> IO ()
-sendfileToStdout (Fd srcFd) = do
-  FD {fdFD = dstFd} <- handleToFd stdout
-  throwErrnoIfMinus1_
-    "direct_copy"
-    [C.block| int {
-      int src_fd = $(int srcFd);
-      int dst_fd = $(int dstFd);
-      char buf[131072];
-      ssize_t n;
-      while ((n = read(src_fd, buf, 131072)) > 0) {
-        char *p = buf;
-        while (n > 0) {
-          ssize_t w = write(dst_fd, p, n);
-          if (w < 0) return -1;
-          p += w;
-          n -= w;
-        }
-      }
-      return (n < 0) ? -1 : 0;
-    } |]
+copyFdToStdout :: Fd -> IO ()
+copyFdToStdout (Fd srcFd) = do
+  let !srcFD = FD.FD {FD.fdFD = srcFd, FD.fdIsNonBlocking = 0}
+      !dstFD = FD.FD {FD.fdFD = 1, FD.fdIsNonBlocking = 0}
+  allocaBytes bufSize $ \buf -> copyLoop srcFD dstFD buf
 
-copyHandle :: Handle -> Handle -> IO ()
-copyHandle src dst = go
+copyLoop :: FD.FD -> FD.FD -> Ptr Word8 -> IO ()
+copyLoop !srcFD !dstFD !buf = go
   where
     go = do
-      chunk <- BS.hGetSome src 131072
-      if BS.null chunk
-        then pure ()
-        else BS.hPut dst chunk >> go
+      n <- FD.readRawBufferPtr "read" srcFD buf 0 (fromIntegral bufSize)
+      when (n > 0) $ do
+        writeAll dstFD buf n
+        go
+
+writeAll :: FD.FD -> Ptr Word8 -> Int -> IO ()
+writeAll !fd !buf !len = go buf (fromIntegral len)
+  where
+    go !p !remaining
+      | remaining <= 0 = pure ()
+      | otherwise = do
+          written <- FD.writeRawBufferPtr "write" fd p 0 (fromIntegral remaining)
+          go (p `plusPtr` fromIntegral written) (remaining - written)
+
+copyHandleRaw :: Handle -> Handle -> IO ()
+copyHandleRaw src dst = do
+  allocaBytes bufSize $ \buf -> do
+    let go = do
+          n <- hGetBufSome src buf bufSize
+          when (n > 0) $ do
+            hPutBuf dst buf n
+            go
+    go
 
 processWithOptions :: CatOptions -> CatState -> FilePath -> IO CatState
 processWithOptions opts state path = do

@@ -9,7 +9,6 @@ build-type:         Simple
 
 common warnings
     ghc-options: -Wall -O2 -rtsopts "-with-rtsopts=-A1m -I0 -G1"
-    cc-options: -O3
 
 executable haskat
     import:           warnings
@@ -18,8 +17,7 @@ executable haskat
     build-depends:
         base >= 4.14 && < 5,
         bytestring >= 0.10,
-        unix >= 2.7,
-        inline-c >= 0.9
+        unix >= 2.7
     hs-source-dirs:   src
     default-language: GHC2021
 
