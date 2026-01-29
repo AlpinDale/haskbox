@@ -1,7 +1,7 @@
 cabal-version:      3.4
-name:               haskat
+name:               haskbox
 version:            0.1.0.0
-synopsis:           A GNU cat implementation in Haskell
+synopsis:           Unix utilities in Haskell (busybox-style)
 license:            Apache-2.0
 author:             AlpinDale
 maintainer:         alpindale@gmail.com
@@ -10,10 +10,10 @@ build-type:         Simple
 common warnings
     ghc-options: -Wall -O2 -rtsopts "-with-rtsopts=-A1m -I0 -G1"
 
-executable haskat
+executable haskbox
     import:           warnings
     main-is:          Main.hs
-    other-modules:    Cat
+    other-modules:    Cmd.Cat
     build-depends:
         base >= 4.14 && < 5,
         bytestring >= 0.10,
@@ -21,7 +21,7 @@ executable haskat
     hs-source-dirs:   src
     default-language: GHC2021
 
-test-suite haskat-test
+test-suite haskbox-test
     import:           warnings
     type:             exitcode-stdio-1.0
     main-is:          Test.hs

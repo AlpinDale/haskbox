@@ -20,15 +20,15 @@ data TestStats = TestStats {passed :: Int, failed :: Int}
 main :: IO ()
 main = do
   refCat <- findReferenceCat
-  haskat <- findHaskat
+  haskbox <- findHaskbox
 
   putStrLn $ "Reference cat: " ++ refCat
-  putStrLn $ "Testing haskat: " ++ haskat
+  putStrLn $ "Testing: " ++ haskbox ++ " cat"
   putStrLn ""
 
-  withSystemTempDirectory "haskat-test" $ \tmpDir -> do
+  withSystemTempDirectory "haskbox-test" $ \tmpDir -> do
     setupTestFiles tmpDir
-    stats <- runTests refCat haskat tmpDir
+    stats <- runTests refCat haskbox tmpDir
     putStrLn ""
     putStrLn "=============================="
     putStrLn $ "PASS: " ++ show (passed stats)
@@ -56,15 +56,15 @@ findReferenceCat = do
           hPutStrLn stderr "Error: cat not found in PATH"
           exitFailure
 
-findHaskat :: IO FilePath
-findHaskat = do
-  (_, out, _) <- readProcessWithExitCode "cabal" ["list-bin", "haskat"] ""
+findHaskbox :: IO FilePath
+findHaskbox = do
+  (_, out, _) <- readProcessWithExitCode "cabal" ["list-bin", "haskbox"] ""
   let path = filter (/= '\n') out
   exists <- doesFileExist path
   if exists
     then return path
     else do
-      hPutStrLn stderr "Error: haskat not built. Run 'cabal build' first."
+      hPutStrLn stderr "Error: haskbox not built. Run 'cabal build' first."
       exitFailure
 
 setupTestFiles :: FilePath -> IO ()
@@ -103,9 +103,9 @@ setupTestFiles dir = do
   BS.writeFile (dir </> "ünïcödé") "unicode\n"
 
 runTests :: FilePath -> FilePath -> FilePath -> IO TestStats
-runTests ref haskat dir = do
+runTests ref haskbox dir = do
   let runTest name args = do
-        result <- compareOutput ref haskat dir args
+        result <- compareOutput ref haskbox dir args
         case result of
           Pass -> do
             putStrLn $ "PASS: " ++ name
@@ -157,9 +157,9 @@ runTests ref haskat dir = do
   return $ foldl (\a b -> TestStats (passed a + passed b) (failed a + failed b)) (TestStats 0 0) results
 
 compareOutput :: FilePath -> FilePath -> FilePath -> [String] -> IO TestResult
-compareOutput ref haskat _ args = do
+compareOutput ref haskbox _ args = do
   (rcRef, outRef, errRef) <- runCmd ref args
-  (rcTest, outTest, errTest) <- runCmd haskat args
+  (rcTest, outTest, errTest) <- runCmd haskbox ("cat" : args)
 
   let errRefNorm = normalizeProgName errRef
       errTestNorm = normalizeProgName errTest
@@ -194,8 +194,9 @@ normalizeProgName :: BS.ByteString -> BS.ByteString
 normalizeProgName s = C8.unlines $ map normLine $ C8.lines s
   where
     normLine line
-      | "gcat:" `BS.isInfixOf` line = replaceBS "gcat:" "haskat:" line
-      | "cat:" `BS.isInfixOf` line = replaceBS "cat:" "haskat:" line
+      | "haskbox cat:" `BS.isInfixOf` line = replaceBS "haskbox cat:" "PROG:" line
+      | "gcat:" `BS.isInfixOf` line = replaceBS "gcat:" "PROG:" line
+      | "cat:" `BS.isInfixOf` line = replaceBS "cat:" "PROG:" line
       | otherwise = line
 
     replaceBS old new str =

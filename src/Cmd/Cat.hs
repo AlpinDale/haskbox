@@ -1,16 +1,10 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Cat
-  ( CatOptions (..),
-    defaultOptions,
-    catFiles,
-    catFilesWithErrors,
-  )
-where
+module Cmd.Cat (run) where
 
 import Control.Exception (IOException, catch, finally)
-import Control.Monad (foldM, foldM_, when)
+import Control.Monad (foldM, when)
 import Data.ByteString qualified as BS
 import Data.ByteString.Unsafe qualified as BU
 import Data.IORef
@@ -18,30 +12,121 @@ import Data.Word (Word8)
 import Foreign.Marshal.Alloc (allocaBytes)
 import Foreign.Ptr (Ptr, plusPtr)
 import GHC.IO.FD qualified as FD
+import System.Exit (exitFailure, exitSuccess)
 import System.IO
 import System.Posix.IO (OpenMode (..), closeFd, defaultFileFlags, openFd)
 import System.Posix.Types (Fd (..))
 
-data CatOptions = CatOptions
+run :: [String] -> IO ()
+run args = case parseArgs args of
+  Left err -> do
+    hPutStrLn stderr $ "haskbox cat: " ++ err
+    exitFailure
+  Right (opts, files)
+    | optShowVersion opts -> putStrLn "haskbox cat 0.1.0" >> exitSuccess
+    | optShowHelp opts -> printHelp >> exitSuccess
+    | otherwise -> do
+        let paths = if null files then ["-"] else files
+        hasError <- catFilesWithErrors opts paths
+        when hasError exitFailure
+
+data Options = Options
   { optNumberNonblank :: !Bool,
     optShowEnds :: !Bool,
     optNumber :: !Bool,
     optSqueezeBlank :: !Bool,
     optShowTabs :: !Bool,
-    optShowNonprint :: !Bool
+    optShowNonprint :: !Bool,
+    optShowHelp :: !Bool,
+    optShowVersion :: !Bool,
+    optFiles :: ![FilePath]
   }
-  deriving (Show, Eq)
 
-defaultOptions :: CatOptions
+defaultOptions :: Options
 defaultOptions =
-  CatOptions
+  Options
     { optNumberNonblank = False,
       optShowEnds = False,
       optNumber = False,
       optSqueezeBlank = False,
       optShowTabs = False,
-      optShowNonprint = False
+      optShowNonprint = False,
+      optShowHelp = False,
+      optShowVersion = False,
+      optFiles = []
     }
+
+parseArgs :: [String] -> Either String (Options, [FilePath])
+parseArgs = go defaultOptions
+  where
+    go opts [] = Right (opts, reverse $ optFiles opts)
+    go opts ("--" : rest) = Right (opts {optFiles = reverse rest ++ optFiles opts}, [])
+    go opts ("--help" : rest) = go opts {optShowHelp = True} rest
+    go opts ("--version" : rest) = go opts {optShowVersion = True} rest
+    go opts ("--show-all" : rest) = go (setA opts) rest
+    go opts ("--number-nonblank" : rest) = go (setB opts) rest
+    go opts ("--show-ends" : rest) = go (setE opts) rest
+    go opts ("--number" : rest) = go (setN opts) rest
+    go opts ("--squeeze-blank" : rest) = go (setS opts) rest
+    go opts ("--show-tabs" : rest) = go (setT opts) rest
+    go opts ("--show-nonprinting" : rest) = go (setV opts) rest
+    go _ (('-' : '-' : opt) : _) = Left $ "unrecognized option '--" ++ opt ++ "'"
+    go opts (('-' : shorts) : rest)
+      | null shorts = go opts {optFiles = "-" : optFiles opts} rest
+      | otherwise = case parseShorts opts shorts of
+          Left e -> Left e
+          Right opts' -> go opts' rest
+    go opts (file : rest) = go opts {optFiles = file : optFiles opts} rest
+
+    parseShorts opts [] = Right opts
+    parseShorts opts (c : cs) = case c of
+      'A' -> parseShorts (setA opts) cs
+      'b' -> parseShorts (setB opts) cs
+      'e' -> parseShorts (setVE opts) cs
+      'E' -> parseShorts (setE opts) cs
+      'n' -> parseShorts (setN opts) cs
+      's' -> parseShorts (setS opts) cs
+      't' -> parseShorts (setVT opts) cs
+      'T' -> parseShorts (setT opts) cs
+      'u' -> parseShorts opts cs
+      'v' -> parseShorts (setV opts) cs
+      'h' -> parseShorts opts {optShowHelp = True} cs
+      _ -> Left $ "invalid option -- '" ++ [c] ++ "'"
+
+    setA o = o {optShowEnds = True, optShowTabs = True, optShowNonprint = True}
+    setB o = o {optNumberNonblank = True}
+    setE o = o {optShowEnds = True}
+    setN o = o {optNumber = True}
+    setS o = o {optSqueezeBlank = True}
+    setT o = o {optShowTabs = True}
+    setV o = o {optShowNonprint = True}
+    setVE o = setV (setE o)
+    setVT o = setV (setT o)
+
+printHelp :: IO ()
+printHelp =
+  putStr $
+    unlines
+      [ "Usage: haskbox cat [OPTION]... [FILE]...",
+        "Concatenate FILE(s) to standard output.",
+        "",
+        "  -A, --show-all           equivalent to -vET",
+        "  -b, --number-nonblank    number nonempty output lines",
+        "  -e                       equivalent to -vE",
+        "  -E, --show-ends          display $ at end of each line",
+        "  -n, --number             number all output lines",
+        "  -s, --squeeze-blank      suppress repeated empty output lines",
+        "  -t                       equivalent to -vT",
+        "  -T, --show-tabs          display TAB characters as ^I",
+        "  -u                       (ignored)",
+        "  -v, --show-nonprinting   use ^ and M- notation",
+        "      --help               display this help and exit",
+        "      --version            output version information and exit",
+        "",
+        "With no FILE, or when FILE is -, read standard input."
+      ]
+
+-- Core implementation
 
 data CatState = CatState
   { lineNumber :: !Int,
@@ -54,14 +139,11 @@ data CatState = CatState
 initialState :: CatState
 initialState = CatState 1 False True False
 
-catFiles :: CatOptions -> [FilePath] -> IO ()
-catFiles opts = foldM_ (processFile opts) initialState
-
-catFilesWithErrors :: CatOptions -> [FilePath] -> IO Bool
+catFilesWithErrors :: Options -> [FilePath] -> IO Bool
 catFilesWithErrors opts files = hadError <$> foldM (processFileWithError opts) initialState files
 
 {-# INLINE needsProcessing #-}
-needsProcessing :: CatOptions -> Bool
+needsProcessing :: Options -> Bool
 needsProcessing opts =
   optNumberNonblank opts
     || optShowEnds opts
@@ -70,13 +152,13 @@ needsProcessing opts =
     || optShowTabs opts
     || optShowNonprint opts
 
-processFile :: CatOptions -> CatState -> FilePath -> IO CatState
+processFile :: Options -> CatState -> FilePath -> IO CatState
 processFile opts state path
   | not (needsProcessing opts) = simpleCat path >> pure state
   | otherwise = processWithOptions opts state path
 
 bufSize :: Int
-bufSize = 131072 -- from GNU cat
+bufSize = 131072
 
 simpleCat :: FilePath -> IO ()
 simpleCat "-" = do
@@ -113,7 +195,7 @@ writeAll !fd !buf !len = go buf (fromIntegral len)
           go (p `plusPtr` fromIntegral written) (remaining - written)
 
 copyHandleRaw :: Handle -> Handle -> IO ()
-copyHandleRaw src dst = do
+copyHandleRaw src dst =
   allocaBytes bufSize $ \buf -> do
     let go = do
           n <- hGetBufSome src buf bufSize
@@ -122,7 +204,7 @@ copyHandleRaw src dst = do
             go
     go
 
-processWithOptions :: CatOptions -> CatState -> FilePath -> IO CatState
+processWithOptions :: Options -> CatState -> FilePath -> IO CatState
 processWithOptions opts state path = do
   contents <-
     if path == "-"
@@ -134,7 +216,7 @@ processWithOptions opts state path = do
   hSetBuffering stdout (BlockBuffering (Just 65536))
   processStrict opts state contents
 
-processStrict :: CatOptions -> CatState -> BS.ByteString -> IO CatState
+processStrict :: Options -> CatState -> BS.ByteString -> IO CatState
 processStrict opts state0 bs0 = do
   let !doNum = optNumber opts
       !doNumNonblank = optNumberNonblank opts
@@ -236,10 +318,10 @@ formatLineNum !n
     digits = map (fromIntegral . (+ 48)) $ toDigits n
     padding = replicate (6 - length digits) 0x20
     toDigits 0 = [0]
-    toDigits x = go x []
+    toDigits x = toDigitsGo x []
       where
-        go 0 acc = acc
-        go m acc = go (m `quot` 10) (m `rem` 10 : acc)
+        toDigitsGo 0 acc = acc
+        toDigitsGo m acc = toDigitsGo (m `quot` 10) (m `rem` 10 : acc)
 
 {-# INLINE transformBS #-}
 transformBS :: Bool -> Bool -> BS.ByteString -> BS.ByteString
@@ -270,13 +352,13 @@ showNonprinting !b
                 then "M-^?"
                 else BS.pack [0x4D, 0x2D, low]
 
-processFileWithError :: CatOptions -> CatState -> FilePath -> IO CatState
+processFileWithError :: Options -> CatState -> FilePath -> IO CatState
 processFileWithError opts state path =
   catch (processFile opts state path) handler
   where
     handler :: IOException -> IO CatState
     handler e = do
-      hPutStrLn stderr $ "haskat: " ++ path ++ ": " ++ friendlyError (show e)
+      hPutStrLn stderr $ "haskbox cat: " ++ path ++ ": " ++ friendlyError (show e)
       pure state {hadError = True}
 
     friendlyError s
