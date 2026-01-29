@@ -18,10 +18,9 @@ executable haskat
     build-depends:
         base >= 4.14 && < 5,
         bytestring >= 0.10,
-        unix >= 2.7
+        unix >= 2.7,
+        inline-c >= 0.9
     hs-source-dirs:   src
-    c-sources:        cbits/copyfile.c
-    include-dirs:     cbits
     default-language: GHC2021
 
 test-suite haskat-test

@@ -1,5 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Cat
   ( CatOptions (..),
@@ -19,9 +21,12 @@ import Foreign.C.Error (throwErrnoIfMinus1_)
 import Foreign.C.Types (CInt (..))
 import GHC.IO.FD (FD (..))
 import GHC.IO.Handle.FD (handleToFd)
+import Language.C.Inline qualified as C
 import System.IO
 import System.Posix.IO (OpenMode (..), closeFd, defaultFileFlags, openFd)
 import System.Posix.Types (Fd (..))
+
+C.include "<unistd.h>"
 
 data CatOptions = CatOptions
   { optNumberNonblank :: !Bool,
@@ -86,13 +91,27 @@ simpleCat path = do
   fd <- openFd path ReadOnly defaultFileFlags
   sendfileToStdout fd `finally` closeFd fd
 
-foreign import ccall unsafe "copyfile.h direct_copy"
-  c_direct_copy :: CInt -> CInt -> IO CInt
-
 sendfileToStdout :: Fd -> IO ()
 sendfileToStdout (Fd srcFd) = do
   FD {fdFD = dstFd} <- handleToFd stdout
-  throwErrnoIfMinus1_ "direct_copy" $ c_direct_copy srcFd dstFd
+  throwErrnoIfMinus1_
+    "direct_copy"
+    [C.block| int {
+      int src_fd = $(int srcFd);
+      int dst_fd = $(int dstFd);
+      char buf[131072];
+      ssize_t n;
+      while ((n = read(src_fd, buf, 131072)) > 0) {
+        char *p = buf;
+        while (n > 0) {
+          ssize_t w = write(dst_fd, p, n);
+          if (w < 0) return -1;
+          p += w;
+          n -= w;
+        }
+      }
+      return (n < 0) ? -1 : 0;
+    } |]
 
 copyHandle :: Handle -> Handle -> IO ()
 copyHandle src dst = go
