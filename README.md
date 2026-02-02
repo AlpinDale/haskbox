@@ -2,17 +2,14 @@
 
 Unix utilities in Haskell (busybox-style).
 
-## Build
+## Build & Install
 
 ```bash
-cabal build
+make build
+make install
 ```
 
-## Install
-
-```bash
-cabal install --installdir=$HOME/.local/bin
-```
+Requires the [Glasgow Haskell Compiler (GHC)](https://www.haskell.org/ghc/) and [Cabal](https://www.haskell.org/cabal/).
 
 ## Usage
 
