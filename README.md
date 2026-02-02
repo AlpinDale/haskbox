@@ -9,7 +9,9 @@ make build
 make install
 ```
 
-Requires the [Glasgow Haskell Compiler (GHC)](https://www.haskell.org/ghc/) and [Cabal](https://www.haskell.org/cabal/).
+Requires the [Glasgow Haskell Compiler (GHC)](https://www.haskell.org/ghc/) and [Cabal](https://www.haskell.org/cabal/). It's recommended to use [GHCup](https://www.haskell.org/ghcup/) to install GHC and Cabal.
+
+You may also need libgmp on Linux. On Ubuntu, you can install it with `sudo apt install libgmp-dev`.
 
 ## Usage
 
