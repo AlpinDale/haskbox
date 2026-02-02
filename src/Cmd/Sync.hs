@@ -1,20 +1,16 @@
 {-# LANGUAGE CApiFFI #-}
+{-# OPTIONS_GHC -Wno-deprecations #-}
 
 module Cmd.Sync (run) where
 
 import Control.Exception (IOException, catch)
-import Foreign.C.Types (CInt (..))
 import System.Exit (exitFailure, exitSuccess)
 import System.IO (hPutStrLn, stderr)
 import System.Posix.IO (OpenMode (..), closeFd, defaultFileFlags, openFd)
-import System.Posix.Types (Fd (..))
+import System.Posix.Unistd (fileSynchronise, fileSynchroniseDataOnly)
 import Version (versionString)
 
 foreign import capi "unistd.h sync" c_sync :: IO ()
-
-foreign import capi "unistd.h fsync" c_fsync :: CInt -> IO CInt
-
-foreign import capi "unistd.h fdatasync" c_fdatasync :: CInt -> IO CInt
 
 run :: [String] -> IO ()
 run args = case parseArgs defaultOpts args of
@@ -72,19 +68,27 @@ syncFile opts path = catch doSync handler
   where
     doSync = do
       fd <- openFd path ReadOnly defaultFileFlags
-      let Fd cfd = fd
-      -- Note: -f (syncfs) is not available on macOS, so we fall back to fsync
-      -- which syncs the file and its metadata to disk
-      ret <-
-        if optDataSync opts
-          then c_fdatasync cfd
-          else c_fsync cfd
+      result <- doSyncFd fd
       closeFd fd
-      if ret == 0
-        then return False
-        else do
-          hPutStrLn stderr $ "haskbox sync: error syncing '" ++ path ++ "'"
-          return True
+      return result
+
+    doSyncFd fd
+      | optDataSync opts = tryDataSync fd
+      | otherwise = trySyncFd fd
+
+    -- Try fdatasync, fall back to fsync if unsupported (e.g., on macOS)
+    tryDataSync fd =
+      catch
+        (fileSynchroniseDataOnly fd >> return False)
+        (\(_ :: IOException) -> trySyncFd fd)
+
+    trySyncFd fd =
+      catch
+        (fileSynchronise fd >> return False)
+        ( \(_ :: IOException) -> do
+            hPutStrLn stderr $ "haskbox sync: error syncing '" ++ path ++ "'"
+            return True
+        )
 
     handler :: IOException -> IO Bool
     handler _ = do
