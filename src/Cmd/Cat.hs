@@ -16,6 +16,7 @@ import System.Exit (exitFailure, exitSuccess)
 import System.IO
 import System.Posix.IO (OpenMode (..), closeFd, defaultFileFlags, openFd)
 import System.Posix.Types (Fd (..))
+import Version (versionString)
 
 run :: [String] -> IO ()
 run args = case parseArgs args of
@@ -23,7 +24,7 @@ run args = case parseArgs args of
     hPutStrLn stderr $ "haskbox cat: " ++ err
     exitFailure
   Right (opts, files)
-    | optShowVersion opts -> putStrLn "haskbox cat 0.1.0" >> exitSuccess
+    | optShowVersion opts -> putStrLn (versionString "cat") >> exitSuccess
     | optShowHelp opts -> printHelp >> exitSuccess
     | otherwise -> do
         let paths = if null files then ["-"] else files
