@@ -37,7 +37,7 @@ The performance gap is due to GHC's runtime system initialization (~15ms overhea
 - [ ] Add manpages for all commands
 
 <details>
-<summary>Coreutils implementation status (61/83)</summary>
+<summary>Coreutils implementation status (62/83)</summary>
 
 | Command   | Status | Description                         |
 |-----------|--------|-------------------------------------|
@@ -71,7 +71,7 @@ The performance gap is due to GHC's runtime system initialization (~15ms overhea
 | link      | ✅     | Create hard link                    |
 | ln        | ✅     | Create links                        |
 | logname   | ✅     | Print login name                    |
-| ls        | ⬚      | List directory contents             |
+| ls        | ✅     | List directory contents             |
 | md5sum    | ⬚      | Compute MD5 checksum                |
 | mkdir     | ✅     | Create directories                  |
 | mkfifo    | ✅     | Create named pipes                  |

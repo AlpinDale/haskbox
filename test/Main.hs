@@ -1,6 +1,8 @@
 module Main (main) where
 
 import Test.Cmd.File qualified as File
+import Test.Cmd.Ls qualified as Ls
+import Test.Cmd.LsSpec qualified as LsSpec
 import Test.Cmd.Misc qualified as Misc
 import Test.Cmd.Path qualified as Path
 import Test.Cmd.Sort qualified as Sort
@@ -17,6 +19,8 @@ main = withTestEnv $ \env -> do
       [ Text.tests env,
         Sort.tests env,
         File.tests env,
+        Ls.tests env,
+        LsSpec.tests env,
         Path.tests env,
         System.tests env,
         Misc.tests env

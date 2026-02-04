@@ -21,6 +21,7 @@ import Cmd.Id qualified as Id
 import Cmd.Link qualified as Link
 import Cmd.Ln qualified as Ln
 import Cmd.Logname qualified as Logname
+import Cmd.Ls qualified as Ls
 import Cmd.Mkdir qualified as Mkdir
 import Cmd.Mkfifo qualified as Mkfifo
 import Cmd.Mktemp qualified as Mktemp
@@ -99,6 +100,7 @@ dispatch _ "id" args = Id.run args
 dispatch _ "link" args = Link.run args
 dispatch _ "ln" args = Ln.run args
 dispatch _ "logname" args = Logname.run args
+dispatch _ "ls" args = Ls.run args
 dispatch _ "mkdir" args = Mkdir.run args
 dispatch _ "mkfifo" args = Mkfifo.run args
 dispatch _ "mktemp" args = Mktemp.run args
@@ -175,6 +177,7 @@ printUsage =
         "  link       Create hard link",
         "  ln         Create links",
         "  logname    Print login name",
+        "  ls         List directory contents",
         "  mkdir      Create directories",
         "  mkfifo     Create named pipes (FIFOs)",
         "  mktemp     Create temporary file",

@@ -10,6 +10,10 @@ module Test.Utils
     runGnu,
     runCmd,
     runCmdStdin,
+    runCmdWithEnv,
+    runCmdStdinWithEnv,
+    runCmdTtyWithEnv,
+    findScript,
 
     -- * Comparison helpers
     compareOutput,
@@ -30,7 +34,9 @@ where
 import Control.Exception (bracket)
 import Data.ByteString qualified as BS
 import Data.ByteString.Char8 qualified as C8
+import Data.Map.Strict qualified as Map
 import System.Directory (doesFileExist, findExecutable)
+import System.Environment (getEnvironment)
 import System.Exit (ExitCode (..))
 import System.FilePath ((</>))
 import System.IO (hClose)
@@ -95,11 +101,22 @@ runGnu env cmd args = do
 
 runCmd :: FilePath -> [String] -> IO (ExitCode, BS.ByteString, BS.ByteString)
 runCmd cmd args = do
+  env <- getEnvironment
+  runCmdWithEnv' cmd args env
+
+runCmdWithEnv :: FilePath -> [String] -> [(String, String)] -> IO (ExitCode, BS.ByteString, BS.ByteString)
+runCmdWithEnv cmd args overrides = do
+  env <- mergeEnv overrides
+  runCmdWithEnv' cmd args env
+
+runCmdWithEnv' :: FilePath -> [String] -> [(String, String)] -> IO (ExitCode, BS.ByteString, BS.ByteString)
+runCmdWithEnv' cmd args env = do
   (_, Just hOut, Just hErr, ph) <-
     createProcess
       (proc cmd args)
         { std_out = CreatePipe,
-          std_err = CreatePipe
+          std_err = CreatePipe,
+          env = Just env
         }
   out <- BS.hGetContents hOut
   err <- BS.hGetContents hErr
@@ -110,12 +127,23 @@ runCmd cmd args = do
 
 runCmdStdin :: FilePath -> [String] -> BS.ByteString -> IO (ExitCode, BS.ByteString, BS.ByteString)
 runCmdStdin cmd args input = do
+  env <- getEnvironment
+  runCmdStdinWithEnv' cmd args input env
+
+runCmdStdinWithEnv :: FilePath -> [String] -> BS.ByteString -> [(String, String)] -> IO (ExitCode, BS.ByteString, BS.ByteString)
+runCmdStdinWithEnv cmd args input overrides = do
+  env <- mergeEnv overrides
+  runCmdStdinWithEnv' cmd args input env
+
+runCmdStdinWithEnv' :: FilePath -> [String] -> BS.ByteString -> [(String, String)] -> IO (ExitCode, BS.ByteString, BS.ByteString)
+runCmdStdinWithEnv' cmd args input env = do
   (Just hIn, Just hOut, Just hErr, ph) <-
     createProcess
       (proc cmd args)
         { std_in = CreatePipe,
           std_out = CreatePipe,
-          std_err = CreatePipe
+          std_err = CreatePipe,
+          env = Just env
         }
   BS.hPut hIn input
   hClose hIn
@@ -125,6 +153,48 @@ runCmdStdin cmd args input = do
   hClose hOut
   hClose hErr
   return (rc, out, err)
+
+findScript :: IO (Maybe FilePath)
+findScript = findExecutable "script"
+
+runCmdTtyWithEnv :: FilePath -> FilePath -> [String] -> [(String, String)] -> IO (ExitCode, BS.ByteString, BS.ByteString)
+runCmdTtyWithEnv scriptPath cmd args overrides = do
+  env <- mergeEnv overrides
+  isMac <- doesFileExist "/usr/bin/sw_vers"
+  let (scriptCmd, scriptArgs) =
+        if isMac
+          then (scriptPath, ["-q", "/dev/null", cmd] ++ args)
+          else (scriptPath, ["-q", "-c", shellJoin (cmd : args), "/dev/null"])
+  (_, Just hOut, Just hErr, ph) <-
+    createProcess
+      (proc scriptCmd scriptArgs)
+        { std_out = CreatePipe,
+          std_err = CreatePipe,
+          env = Just env
+        }
+  out <- BS.hGetContents hOut
+  err <- BS.hGetContents hErr
+  rc <- waitForProcess ph
+  hClose hOut
+  hClose hErr
+  let combined = out <> err
+  return (rc, combined, BS.empty)
+
+shellJoin :: [String] -> String
+shellJoin = unwords . map shellQuote
+
+shellQuote :: String -> String
+shellQuote s = "'" ++ concatMap escapeChar s ++ "'"
+  where
+    escapeChar '\'' = "'\\''"
+    escapeChar c = [c]
+
+mergeEnv :: [(String, String)] -> IO [(String, String)]
+mergeEnv overrides = do
+  base <- getEnvironment
+  let baseMap = Map.fromList base
+      merged = foldl' (\m (k, v) -> Map.insert k v m) baseMap overrides
+  return (Map.toList merged)
 
 compareOutput :: TestEnv -> String -> [String] -> IO ()
 compareOutput env cmd args = do
