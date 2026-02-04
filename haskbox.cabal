@@ -22,6 +22,9 @@ executable haskbox
         Cmd.Cp
         Cmd.Cut
         Cmd.Date
+        Cmd.Df
+        Cmd.Df.Mount
+        Cmd.Df.Types
         Cmd.Dirname
         Cmd.Dos2unix
         Cmd.Echo
@@ -105,6 +108,7 @@ test-suite haskbox-test
         Test.Cmd.File
         Test.Cmd.Ls
         Test.Cmd.LsSpec
+        Test.Cmd.DfSpec
         Test.Cmd.Misc
         Test.Cmd.Path
         Test.Cmd.Sort

@@ -1,5 +1,6 @@
 module Main (main) where
 
+import Test.Cmd.DfSpec qualified as DfSpec
 import Test.Cmd.File qualified as File
 import Test.Cmd.Ls qualified as Ls
 import Test.Cmd.LsSpec qualified as LsSpec
@@ -21,6 +22,7 @@ main = withTestEnv $ \env -> do
         File.tests env,
         Ls.tests env,
         LsSpec.tests env,
+        DfSpec.tests env,
         Path.tests env,
         System.tests env,
         Misc.tests env

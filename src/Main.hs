@@ -7,6 +7,7 @@ import Cmd.Comm qualified as Comm
 import Cmd.Cp qualified as Cp
 import Cmd.Cut qualified as Cut
 import Cmd.Date qualified as Date
+import Cmd.Df qualified as Df
 import Cmd.Dirname qualified as Dirname
 import Cmd.Dos2unix qualified as Dos2unix
 import Cmd.Echo qualified as Echo
@@ -86,6 +87,7 @@ dispatch _ "comm" args = Comm.run args
 dispatch _ "cp" args = Cp.run args
 dispatch _ "cut" args = Cut.run args
 dispatch _ "date" args = Date.run args
+dispatch _ "df" args = Df.run args
 dispatch _ "dirname" args = Dirname.run args
 dispatch _ "dos2unix" args = Dos2unix.run args
 dispatch _ "echo" args = Echo.run args
@@ -163,6 +165,7 @@ printUsage =
         "  cp         Copy files",
         "  cut        Remove sections from lines",
         "  date       Print date and time",
+        "  df         Report file system disk space usage",
         "  dirname    Strip filename from path",
         "  dos2unix   Convert DOS line endings to Unix",
         "  echo       Print arguments",
