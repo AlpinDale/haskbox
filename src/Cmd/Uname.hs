@@ -107,25 +107,34 @@ printUname opts = do
       -- - hardware platform is "unknown" on macOS (omitted for -a)
       -- - operating system is "Darwin"
       mach = machine sysid
-      -- GNU coreutils hardcodes processor based on architecture
-      processorName = case mach of
-        "arm64" -> "arm"
-        "x86_64" -> "i386"
-        "i386" -> "i386"
+      sysName = systemName sysid
+      -- GNU coreutils processor (-p) is typically same as machine on Linux
+      -- On macOS it's "arm" for arm64, "i386" for x86_64
+      processorName = case sysName of
+        "Darwin" -> case mach of
+          "arm64" -> "arm"
+          "x86_64" -> "i386"
+          "i386" -> "i386"
+          other -> other
+        _ -> mach -- On Linux, processor is same as machine
+        -- hardware platform (-i) is same as machine on Linux, "unknown" on macOS
+      hardwarePlatform = case sysName of
+        "Darwin" -> "unknown"
+        _ -> mach
+      -- operating system (-o) is "GNU/Linux" on Linux, "Darwin" on macOS
+      operatingSystem = case sysName of
+        "Linux" -> "GNU/Linux"
         other -> other
-      -- hardwarePlatform is "unknown" on macOS - omitted when using -a
-      hardwarePlatform = "unknown"
-      operatingSystem = systemName sysid -- Darwin
       -- For -a, omit "unknown" fields (processor and hardware platform may be unknown)
       -- For explicit options like -p or -i, print "unknown"
       parts =
         filter
           (not . null)
-          [ if showAll || showDefault || optKernel opts then systemName sysid else "",
+          [ if showAll || showDefault || optKernel opts then sysName else "",
             if showAll || optNodename opts then nodeName sysid else "",
             if showAll || optRelease opts then release sysid else "",
             if showAll || optSysVersion opts then version sysid else "",
-            if showAll || optMachine opts then machine sysid else "",
+            if showAll || optMachine opts then mach else "",
             if optProcessor opts || (showAll && processorName /= "unknown") then processorName else "",
             if optHardware opts || (showAll && hardwarePlatform /= "unknown") then hardwarePlatform else "",
             if showAll || optOperating opts then operatingSystem else ""

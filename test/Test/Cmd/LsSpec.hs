@@ -39,7 +39,10 @@ data SpecCase = SpecCase
   { scName :: String,
     scArgs :: FilePath -> [String],
     scMode :: RunMode,
-    scEnv :: [(String, String)]
+    scEnv :: [(String, String)],
+    -- | Test option to check if the reference ls supports it (e.g., "--zero")
+    -- If the reference ls doesn't support it, skip the test
+    scTestOption :: Maybe String
   }
 
 tests :: TestEnv -> TestTree
@@ -66,27 +69,54 @@ mkTest env getRoot getGnuLs getScript sc =
         envVars = baseEnv ++ scEnv sc
         gnuPrefix = if takeFileName gnuLs == "gls" then "g" else ""
 
-    case scMode sc of
-      RunNonTty -> do
-        (rcRef, outRef, errRef) <- runCmdWithEnv gnuLs args envVars
-        (rcTest, outTest, errTest) <- runCmdWithEnv (envHaskbox env) ("ls" : args) envVars
-        let errRefNorm = normalizeErr "ls" gnuPrefix errRef
-            errTestNorm = normalizeErr "ls" gnuPrefix errTest
-        rcRef @?= rcTest
-        outRef @=? outTest
-        errRefNorm @=? errTestNorm
-      RunTty -> do
-        mScript <- getScript
-        case mScript of
-          Nothing -> pure ()
-          Just scriptPath -> do
-            (rcRef, outRef, errRef) <- runCmdTtyWithEnv scriptPath gnuLs args envVars
-            (rcTest, outTest, errTest) <- runCmdTtyWithEnv scriptPath (envHaskbox env) ("ls" : args) envVars
-            let errRefNorm = normalizeErr "ls" gnuPrefix errRef
-                errTestNorm = normalizeErr "ls" gnuPrefix errTest
-            rcRef @?= rcTest
-            outRef @=? outTest
-            errRefNorm @=? errTestNorm
+    -- Check if the reference ls supports the test option
+    case scTestOption sc of
+      Just testOpt -> do
+        supported <- checkLsSupportsOption gnuLs testOpt
+        when supported $
+          runComparison env gnuLs gnuPrefix args envVars (scMode sc) getScript
+      Nothing -> runComparison env gnuLs gnuPrefix args envVars (scMode sc) getScript
+
+runComparison ::
+  TestEnv ->
+  FilePath ->
+  String ->
+  [String] ->
+  [(String, String)] ->
+  RunMode ->
+  IO (Maybe FilePath) ->
+  Assertion
+runComparison env gnuLs gnuPrefix args envVars mode getScript =
+  case mode of
+    RunNonTty -> do
+      (rcRef, outRef, errRef) <- runCmdWithEnv gnuLs args envVars
+      (rcTest, outTest, errTest) <- runCmdWithEnv (envHaskbox env) ("ls" : args) envVars
+      let errRefNorm = normalizeErr "ls" gnuPrefix errRef
+          errTestNorm = normalizeErr "ls" gnuPrefix errTest
+      rcRef @?= rcTest
+      outRef @=? outTest
+      errRefNorm @=? errTestNorm
+    RunTty -> do
+      mScript <- getScript
+      case mScript of
+        Nothing -> pure ()
+        Just scriptPath -> do
+          (rcRef, outRef, errRef) <- runCmdTtyWithEnv scriptPath gnuLs args envVars
+          (rcTest, outTest, errTest) <- runCmdTtyWithEnv scriptPath (envHaskbox env) ("ls" : args) envVars
+          let errRefNorm = normalizeErr "ls" gnuPrefix errRef
+              errTestNorm = normalizeErr "ls" gnuPrefix errTest
+          rcRef @?= rcTest
+          outRef @=? outTest
+          errRefNorm @=? errTestNorm
+
+-- | Check if the reference ls supports a given option
+checkLsSupportsOption :: FilePath -> String -> IO Bool
+checkLsSupportsOption lsPath opt = do
+  (rc, _, _) <- readProcessWithExitCode lsPath [opt, "/"] ""
+  return $ rc == ExitSuccess || rc == ExitFailure 1
+
+-- ExitSuccess or ExitFailure 1 means the option was recognized
+-- ExitFailure 2 typically means unrecognized option
 
 baseEnv :: [(String, String)]
 baseEnv =
@@ -115,10 +145,17 @@ specCases =
     ]
 
 caseNonTty :: String -> (FilePath -> [String]) -> SpecCase
-caseNonTty name args = SpecCase name args RunNonTty []
+caseNonTty name args = SpecCase name args RunNonTty [] Nothing
 
 caseTty :: String -> (FilePath -> [String]) -> SpecCase
-caseTty name args = SpecCase name args RunTty []
+caseTty name args = SpecCase name args RunTty [] Nothing
+
+-- | Case that requires checking if the option is supported
+caseNonTtyOpt :: String -> String -> (FilePath -> [String]) -> SpecCase
+caseNonTtyOpt name testOpt args = SpecCase name args RunNonTty [] (Just testOpt)
+
+caseTtyOpt :: String -> String -> (FilePath -> [String]) -> SpecCase
+caseTtyOpt name testOpt args = SpecCase name args RunTty [] (Just testOpt)
 
 listingCases :: [SpecCase]
 listingCases =
@@ -159,18 +196,18 @@ infoCases =
 
 sortingCases :: [SpecCase]
 sortingCases =
-  [ caseNonTty "--sort=name" (\root -> ["--sort=name", "-1", root]),
+  [ caseNonTtyOpt "--sort=name" "--sort=name" (\root -> ["--sort=name", "-1", root]),
     caseNonTty "-S sort by size" (\root -> ["-1S", root]),
     caseNonTty "-t sort by time" (\root -> ["-1t", root]),
     caseNonTty "-v version sort" (\root -> ["-1v", root]),
     caseNonTty "-X extension sort" (\root -> ["-1X", root]),
-    caseNonTty "--sort=width" (\root -> ["--sort=width", "-1", root]),
+    caseNonTtyOpt "--sort=width" "--sort=width" (\root -> ["--sort=width", "-1", root]),
     caseNonTty "-U sort=none" (\root -> ["-1U", root]),
     caseNonTty "-f implies -a -U" (\root -> ["-f", root]),
     caseNonTty "-r reverse" (\root -> ["-1r", root]),
     caseNonTty "-c ctime" (\root -> ["-1c", root]),
     caseNonTty "-u atime" (\root -> ["-1u", root]),
-    caseNonTty "--time=birth" (\root -> ["--time=birth", "-l", root]),
+    caseNonTtyOpt "--time=birth" "--time=birth" (\root -> ["--time=birth", "-l", root]),
     caseNonTty "--group-directories-first" (\root -> ["--group-directories-first", "-1", root]),
     caseNonTty "--group-directories-first with --sort=none" (\root -> ["--group-directories-first", "--sort=none", "-1", root])
   ]
@@ -185,7 +222,7 @@ formatCases =
     caseNonTty "--format=single-column" (\root -> ["--format=single-column", root]),
     caseNonTty "--format=commas" (\root -> ["--format=commas", root]),
     caseNonTty "--format=across" (\root -> ["--format=across", root]),
-    caseNonTty "--zero" (\root -> ["--zero", root]),
+    caseNonTtyOpt "--zero" "--zero" (\root -> ["--zero", root]),
     caseNonTty "--tabsize=4" (\root -> ["--tabsize=4", "-C", root]),
     caseTty "TTY default columns" (\root -> ["-w", "80", root])
   ]
@@ -221,8 +258,8 @@ indicatorCases =
     caseNonTty "--indicator-style=classify" (\root -> ["--indicator-style=classify", root]),
     caseNonTty "--indicator-style=file-type" (\root -> ["--indicator-style=file-type", root]),
     caseNonTty "--indicator-style=slash" (\root -> ["--indicator-style=slash", root]),
-    caseNonTty "--classify=auto (non-tty)" (\root -> ["--classify=auto", root]),
-    caseTty "--classify=auto (tty)" (\root -> ["--classify=auto", "-w", "80", root])
+    caseNonTtyOpt "--classify=auto (non-tty)" "--classify=auto" (\root -> ["--classify=auto", root]),
+    caseTtyOpt "--classify=auto (tty)" "--classify=auto" (\root -> ["--classify=auto", "-w", "80", root])
   ]
 
 hyperlinkCases :: [SpecCase]
@@ -234,8 +271,10 @@ hyperlinkCases =
 
 diredCases :: [SpecCase]
 diredCases =
-  [ caseNonTty "--dired" (\root -> ["--dired", root]),
-    caseNonTty "--dired -R" (\root -> ["--dired", "-R", root])
+  [ -- Note: --dired produces Emacs dired format with //DIRED// markers
+    -- This is complex and version-dependent, so we check if it's supported
+    caseNonTtyOpt "--dired" "--dired" (\root -> ["--dired", root]),
+    caseNonTtyOpt "--dired -R" "--dired" (\root -> ["--dired", "-R", root])
   ]
 
 exitStatusCases :: [SpecCase]
