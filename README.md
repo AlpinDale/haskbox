@@ -53,7 +53,7 @@ The performance gap is due to GHC's runtime system initialization (~15ms overhea
 | cut       | ✅     | Remove sections from lines          |
 | date      | ✅     | Print or set date/time              |
 | dd        | ⬚      | Convert and copy files              |
-| df        | ⬚      | Report filesystem disk space        |
+| df        | ✅     | Report filesystem disk space        |
 | dirname   | ✅     | Strip filename from path            |
 | dos2unix  | ✅     | Convert line endings                |
 | du        | ⬚      | Estimate file space usage           |
