@@ -37,7 +37,7 @@ The performance gap is due to GHC's runtime system initialization (~15ms overhea
 - [ ] Add manpages for all commands
 
 <details>
-<summary>Coreutils implementation status (62/83)</summary>
+<summary>Coreutils implementation status (63/83)</summary>
 
 | Command   | Status | Description                         |
 |-----------|--------|-------------------------------------|
