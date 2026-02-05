@@ -14,7 +14,7 @@ jobs:
     name: Linux (Alpine/musl)
     runs-on: ubuntu-latest
     container:
-      image: alpine:3.19
+      image: alpine:edge
 
     steps:
     - name: Install build dependencies
@@ -35,7 +35,9 @@ jobs:
           musl-dev \
           zlib-dev \
           zlib-static \
-          binutils
+          binutils \
+          binutils-gold \
+          pkgconfig
 
     - uses: actions/checkout@v4
       with:
