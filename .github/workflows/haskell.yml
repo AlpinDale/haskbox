@@ -7,7 +7,7 @@ on:
     branches: [ "master" ]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-linux:
@@ -16,6 +16,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
     - uses: haskell-actions/setup@v2
       with:
         ghc-version: 'latest'
@@ -37,10 +40,34 @@ jobs:
       run: |
         cabal update
         cabal build --only-dependencies --enable-tests --enable-benchmarks
+
     - name: Build
       run: cabal build
+
     - name: Run tests
       run: cabal test
+
+    - name: Install UPX
+      if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+      run: sudo apt-get update && sudo apt-get install -y upx
+
+    - name: Prepare binary for release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+      run: |
+        mkdir -p release
+        cp $(cabal list-bin haskbox) release/haskbox
+        chmod +x release/haskbox
+        strip --strip-all release/haskbox
+        upx --ultra-brute release/haskbox
+        tar -czvf release/haskbox-linux-x86_64.tar.gz -C release haskbox
+        rm release/haskbox
+
+    - name: Upload Linux binary
+      if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+      uses: actions/upload-artifact@v4
+      with:
+        name: haskbox-linux-x86_64
+        path: release/haskbox-linux-x86_64.tar.gz
 
   build-macos:
     name: macOS (latest)
@@ -48,6 +75,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
     - uses: haskell-actions/setup@v2
       with:
         ghc-version: 'latest'
@@ -72,7 +102,76 @@ jobs:
       run: |
         cabal update
         cabal build --only-dependencies --enable-tests --enable-benchmarks
+
     - name: Build
       run: cabal build
+
     - name: Run tests
       run: cabal test
+
+    - name: Prepare binary for release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+      run: |
+        mkdir -p release
+        cp $(cabal list-bin haskbox) release/haskbox
+        chmod +x release/haskbox
+        tar -czvf release/haskbox-macos-arm64.tar.gz -C release haskbox
+        rm release/haskbox
+
+    - name: Upload macOS binary
+      if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+      uses: actions/upload-artifact@v4
+      with:
+        name: haskbox-macos-arm64
+        path: release/haskbox-macos-arm64.tar.gz
+
+  release:
+    name: Create Release
+    needs: [build-linux, build-macos]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Get commit number
+      id: commit_number
+      run: |
+        COMMIT_NUM=$(git rev-list --count HEAD)
+        echo "number=$COMMIT_NUM" >> $GITHUB_OUTPUT
+        echo "tag=b$COMMIT_NUM" >> $GITHUB_OUTPUT
+
+    - name: Download Linux binary
+      uses: actions/download-artifact@v4
+      with:
+        name: haskbox-linux-x86_64
+        path: release/
+
+    - name: Download macOS binary
+      uses: actions/download-artifact@v4
+      with:
+        name: haskbox-macos-arm64
+        path: release/
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.commit_number.outputs.tag }}
+        name: Build ${{ steps.commit_number.outputs.number }}
+        body: |
+          Automated build from commit ${{ github.sha }}
+
+          ## Downloads
+          - `haskbox-linux-x86_64.tar.gz` - Linux (x86_64)
+          - `haskbox-macos-arm64.tar.gz` - macOS (Apple Silicon)
+
+          Extract with: `tar -xzf haskbox-<platform>.tar.gz`
+        files: |
+          release/haskbox-linux-x86_64.tar.gz
+          release/haskbox-macos-arm64.tar.gz
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
