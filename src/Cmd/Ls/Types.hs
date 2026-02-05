@@ -300,6 +300,8 @@ data FileInfo = FileInfo
     fiAccessTime :: UTCTime,
     -- | status change time
     fiChangeTime :: UTCTime,
+    -- | birth/creation time (may not be available on all platforms)
+    fiBirthTime :: Maybe UTCTime,
     -- | inode number
     fiInode :: FileOffset,
     -- | device id

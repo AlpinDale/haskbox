@@ -10,16 +10,21 @@ where
 
 import Cmd.Df.Types
 import Control.Exception (IOException, try)
-#if !defined(darwin_HOST_OS)
-import Data.Char (isOctDigit)
-#endif
+import Foreign.Marshal.Alloc (allocaBytes)
+import Foreign.Storable (peekByteOff)
+
+#if defined(darwin_HOST_OS)
 import Foreign.C.String (CString, peekCString, withCString)
 import Foreign.C.Types (CInt (..), CLong (..), CUInt (..), CULong (..))
-import Foreign.Marshal.Alloc (allocaBytes)
 import Foreign.Ptr (Ptr, plusPtr)
-import Foreign.Storable (peekByteOff)
 import System.Exit (ExitCode (..))
 import System.Process qualified
+#else
+import Data.Char (isOctDigit)
+import Foreign.C.String (CString, withCString)
+import Foreign.C.Types (CInt (..), CULong (..))
+import Foreign.Ptr (Ptr)
+#endif
 
 #if defined(darwin_HOST_OS)
 
@@ -114,6 +119,13 @@ getFilesystemInfo path = allocaBytes statFsSize $ \ptr -> do
     peekCStringOff :: Ptr () -> Int -> IO String
     peekCStringOff p off = peekCString (p `plusPtr` off)
 
+readProcess :: FilePath -> [String] -> String -> IO String
+readProcess cmd args input = do
+  readResult <- try $ System.Process.readProcessWithExitCode cmd args input :: IO (Either IOException (ExitCode, String, String))
+  case readResult of
+    Right (_, out, _) -> return out
+    Left _ -> return ""
+
 #else
 
 -- Linux: Use statvfs and parse /proc/mounts
@@ -203,11 +215,3 @@ rights :: [Either a b] -> [b]
 rights [] = []
 rights (Left _ : xs) = rights xs
 rights (Right x : xs) = x : rights xs
-
--- | Helper to run a process and capture output
-readProcess :: FilePath -> [String] -> String -> IO String
-readProcess cmd args input = do
-  readResult <- try $ System.Process.readProcessWithExitCode cmd args input :: IO (Either IOException (ExitCode, String, String))
-  case readResult of
-    Right (_, out, _) -> return out
-    Left _ -> return ""

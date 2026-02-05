@@ -53,11 +53,13 @@ applySort opts
 comparingTime :: Opts -> FileInfo -> FileInfo -> Ordering
 comparingTime opts = comparing (Down . getTime)
   where
-    getTime = case optTimeMode opts of
-      TimeMod -> fiModTime
-      TimeAccess -> fiAccessTime
-      TimeChange -> fiChangeTime
-      TimeBirth -> fiModTime
+    getTime fi = case optTimeMode opts of
+      TimeMod -> fiModTime fi
+      TimeAccess -> fiAccessTime fi
+      TimeChange -> fiChangeTime fi
+      TimeBirth -> case fiBirthTime fi of
+        Just t -> t
+        Nothing -> fiModTime fi
 
 -- | Version-sort comparison (like GNU filevercmp)
 -- Handles embedded numbers naturally: file1 < file2 < file10

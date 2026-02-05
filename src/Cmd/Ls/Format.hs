@@ -596,7 +596,9 @@ getTimeField opts fi = case optTimeMode opts of
   TimeMod -> fiModTime fi
   TimeAccess -> fiAccessTime fi
   TimeChange -> fiChangeTime fi
-  TimeBirth -> fiModTime fi -- Fall back to mod time
+  TimeBirth -> case fiBirthTime fi of
+    Just t -> t
+    Nothing -> fiModTime fi -- Fall back to mod time if birth time unavailable
 
 -- | Quote file name according to quoting style
 quoteName :: Opts -> String -> String

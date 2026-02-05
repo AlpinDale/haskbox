@@ -4,6 +4,7 @@ import Cmd.Ls.Color
 import Cmd.Ls.Filter
 import Cmd.Ls.Format
 import Cmd.Ls.Sort
+import Cmd.Ls.Stat (getBirthTime)
 import Cmd.Ls.Types
 import Control.Exception (IOException, try)
 import Control.Monad (foldM, forM, forM_, unless, when)
@@ -578,6 +579,8 @@ getFileInfo opts path = do
               Left (_ :: IOException) -> return (True, False)
           else return (False, False)
 
+      birthTime <- getBirthTime path
+
       let linkTargetAbs = makeLinkTargetAbs absPath linkTarget
       return $
         Right
@@ -595,6 +598,7 @@ getFileInfo opts path = do
               fiModTime = posixToUTC (modificationTimeHiRes status),
               fiAccessTime = posixToUTC (accessTimeHiRes status),
               fiChangeTime = posixToUTC (statusChangeTimeHiRes status),
+              fiBirthTime = birthTime,
               fiInode = fromIntegral $ fileID linkStatus,
               fiDevice = deviceID linkStatus,
               fiLinkTarget = linkTarget,
@@ -649,6 +653,8 @@ buildFileInfo _opts displayName path absPath stat lstat linkTarget linkBroken li
           || (mode .&. groupExecuteMode) /= 0
           || (mode .&. otherExecuteMode) /= 0
 
+  birthTime <- getBirthTime path
+
   let linkTargetAbs = makeLinkTargetAbs absPath linkTarget
   return
     FileInfo
@@ -665,6 +671,7 @@ buildFileInfo _opts displayName path absPath stat lstat linkTarget linkBroken li
         fiModTime = posixToUTC (modificationTimeHiRes stat),
         fiAccessTime = posixToUTC (accessTimeHiRes stat),
         fiChangeTime = posixToUTC (statusChangeTimeHiRes stat),
+        fiBirthTime = birthTime,
         fiInode = fromIntegral $ fileID lstat,
         fiDevice = deviceID lstat,
         fiLinkTarget = linkTarget,

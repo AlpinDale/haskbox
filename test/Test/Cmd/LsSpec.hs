@@ -112,11 +112,19 @@ runComparison env gnuLs gnuPrefix args envVars mode getScript =
 -- | Check if the reference ls supports a given option
 checkLsSupportsOption :: FilePath -> String -> IO Bool
 checkLsSupportsOption lsPath opt = do
-  (rc, _, _) <- readProcessWithExitCode lsPath [opt, "/"] ""
-  return $ rc == ExitSuccess || rc == ExitFailure 1
-
--- ExitSuccess or ExitFailure 1 means the option was recognized
--- ExitFailure 2 typically means unrecognized option
+  (rc, out, err) <- readProcessWithExitCode lsPath [opt, "/"] ""
+  -- Check both exit code and stderr for error indicators
+  let errStr = err
+      hasInvalidArg = "invalid argument" `isInfixOf` errStr
+      hasUnrecognized = "unrecognized option" `isInfixOf` errStr
+      hasDoesntAllow = "doesn't allow an argument" `isInfixOf` errStr
+      basicSupport = rc == ExitSuccess && not hasInvalidArg && not hasUnrecognized && not hasDoesntAllow
+  -- Special case: --dired behavior differs between GNU ls versions
+  -- In coreutils 8.x, --dired doesn't imply -l, but in 9.x it does
+  -- We follow 9.x behavior, so skip tests on 8.x where output doesn't have dired markers
+  if opt == "--dired" && basicSupport
+    then return $ "//DIRED//" `isInfixOf` out
+    else return basicSupport
 
 baseEnv :: [(String, String)]
 baseEnv =

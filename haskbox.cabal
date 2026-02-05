@@ -44,6 +44,7 @@ executable haskbox
         Cmd.Ls.Filter
         Cmd.Ls.Format
         Cmd.Ls.Sort
+        Cmd.Ls.Stat
         Cmd.Ls.Types
         Cmd.Mkdir
         Cmd.Mkfifo
