@@ -24,8 +24,11 @@ jobs:
           gcc \
           g++ \
           gmp-dev \
+          gmp-static \
           ncurses-dev \
+          ncurses-static \
           libffi-dev \
+          libffi-static \
           make \
           xz \
           tar \
