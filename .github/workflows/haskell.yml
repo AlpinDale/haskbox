@@ -11,16 +11,18 @@ permissions:
 
 jobs:
   build-linux:
-    name: Linux (Ubuntu 20.04/glibc 2.31)
+    name: Linux (Debian 9/glibc 2.24)
     runs-on: ubuntu-latest
     container:
-      image: ubuntu:20.04
+      image: debian:stretch
 
     steps:
     - name: Install build dependencies
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
+        echo "deb http://archive.debian.org/debian stretch main" > /etc/apt/sources.list
+        echo "deb http://archive.debian.org/debian-security stretch/updates main" >> /etc/apt/sources.list
         apt-get update
         apt-get install -y \
           curl \
@@ -55,10 +57,10 @@ jobs:
         cache-name: cache-cabal-linux
       with:
         path: ~/.ghcup/.cache
-        key: ubuntu20-build-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}
+        key: debian9-build-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}
         restore-keys: |
-          ubuntu20-build-${{ env.cache-name }}-
-          ubuntu20-build-
+          debian9-build-${{ env.cache-name }}-
+          debian9-build-
 
     - name: Build
       run: |
@@ -186,7 +188,7 @@ jobs:
           Automated build from commit ${{ github.sha }}
 
           ## Downloads
-          - `haskbox-linux-x86_64.tar.gz` - Linux (x86_64, glibc 2.31+)
+          - `haskbox-linux-x86_64.tar.gz` - Linux (x86_64, glibc 2.24+)
           - `haskbox-macos-arm64.tar.gz` - macOS (Apple Silicon)
 
           Extract with: `tar -xzf haskbox-<platform>.tar.gz`
