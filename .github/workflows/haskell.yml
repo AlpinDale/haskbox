@@ -11,46 +11,70 @@ permissions:
 
 jobs:
   build-linux:
-    name: Linux (Ubuntu 22.04)
-    runs-on: ubuntu-22.04
+    name: Linux (Alpine/musl)
+    runs-on: ubuntu-latest
+    container:
+      image: alpine:3.19
 
     steps:
+    - name: Install build dependencies
+      run: |
+        apk add --no-cache \
+          curl \
+          gcc \
+          g++ \
+          gmp-dev \
+          ncurses-dev \
+          libffi-dev \
+          make \
+          xz \
+          tar \
+          perl \
+          bash \
+          git \
+          musl-dev \
+          zlib-dev \
+          zlib-static \
+          binutils
+
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
-    - uses: haskell-actions/setup@v2
-      with:
-        ghc-version: 'latest'
-        cabal-version: 'latest'
+    - name: Install GHCup and Haskell toolchain
+      run: |
+        curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | \
+          BOOTSTRAP_HASKELL_NONINTERACTIVE=1 \
+          BOOTSTRAP_HASKELL_GHC_VERSION=latest \
+          BOOTSTRAP_HASKELL_CABAL_VERSION=latest \
+          sh
 
     - name: Cache
       uses: actions/cache@v3
       env:
-        cache-name: cache-cabal
+        cache-name: cache-cabal-musl
       with:
         path: ~/.cabal
-        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}
+        key: alpine-build-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}
         restore-keys: |
-          ${{ runner.os }}-build-${{ env.cache-name }}-
-          ${{ runner.os }}-build-
-          ${{ runner.os }}-
-
-    - name: Install dependencies
-      run: |
-        cabal update
-        cabal build --only-dependencies --enable-tests --enable-benchmarks
+          alpine-build-${{ env.cache-name }}-
+          alpine-build-
 
     - name: Build
-      run: cabal build
+      run: |
+        . ~/.ghcup/env
+        cabal update
+        cabal build --enable-tests --enable-benchmarks
 
     - name: Run tests
-      run: cabal test
-
+      run: |
+        . ~/.ghcup/env
+        cabal test
 
     - name: Prepare binary for release
       if: github.event_name == 'push' && github.ref == 'refs/heads/master'
       run: |
+        . ~/.ghcup/env
         mkdir -p release
         cp $(cabal list-bin haskbox) release/haskbox
         chmod +x release/haskbox
@@ -160,7 +184,7 @@ jobs:
           Automated build from commit ${{ github.sha }}
 
           ## Downloads
-          - `haskbox-linux-x86_64.tar.gz` - Linux (x86_64)
+          - `haskbox-linux-x86_64.tar.gz` - Linux (x86_64, musl-based static binary)
           - `haskbox-macos-arm64.tar.gz` - macOS (Apple Silicon)
 
           Extract with: `tar -xzf haskbox-<platform>.tar.gz`
