@@ -11,36 +11,31 @@ permissions:
 
 jobs:
   build-linux:
-    name: Linux (Alpine/musl)
+    name: Linux (Ubuntu 20.04/glibc 2.31)
     runs-on: ubuntu-latest
     container:
-      image: alpine:edge
+      image: ubuntu:20.04
 
     steps:
     - name: Install build dependencies
+      env:
+        DEBIAN_FRONTEND: noninteractive
       run: |
-        apk add --no-cache \
+        apt-get update
+        apt-get install -y \
           curl \
           gcc \
           g++ \
-          gmp-dev \
-          gmp-static \
-          ncurses-dev \
-          ncurses-static \
+          libgmp-dev \
+          libncurses-dev \
           libffi-dev \
-          libffi-static \
           make \
-          xz \
-          tar \
-          perl \
-          bash \
+          xz-utils \
           git \
-          musl-dev \
-          zlib-dev \
-          zlib-static \
+          zlib1g-dev \
           binutils \
-          binutils-gold \
-          pkgconfig
+          pkg-config \
+          ca-certificates
 
     - uses: actions/checkout@v4
       with:
@@ -57,20 +52,19 @@ jobs:
     - name: Cache
       uses: actions/cache@v3
       env:
-        cache-name: cache-cabal-musl
+        cache-name: cache-cabal-linux
       with:
-        path: ~/.cabal
-        key: alpine-build-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}
+        path: ~/.ghcup/.cache
+        key: ubuntu20-build-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}
         restore-keys: |
-          alpine-build-${{ env.cache-name }}-
-          alpine-build-
+          ubuntu20-build-${{ env.cache-name }}-
+          ubuntu20-build-
 
     - name: Build
       run: |
         . ~/.ghcup/env
         cabal update
-        cabal build --enable-tests --enable-benchmarks \
-          --ghc-options="-static -optl-static -optl-pthread"
+        cabal build --enable-tests --enable-benchmarks
 
     - name: Run tests
       continue-on-error: true
@@ -192,7 +186,7 @@ jobs:
           Automated build from commit ${{ github.sha }}
 
           ## Downloads
-          - `haskbox-linux-x86_64.tar.gz` - Linux (x86_64, musl-based static binary)
+          - `haskbox-linux-x86_64.tar.gz` - Linux (x86_64, glibc 2.31+)
           - `haskbox-macos-arm64.tar.gz` - macOS (Apple Silicon)
 
           Extract with: `tar -xzf haskbox-<platform>.tar.gz`
