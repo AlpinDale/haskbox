@@ -10,8 +10,8 @@ permissions:
   contents: read
 
 jobs:
-  build:
-
+  build-linux:
+    name: Linux (Ubuntu 22.04)
     runs-on: ubuntu-22.04
 
     steps:
@@ -32,6 +32,41 @@ jobs:
           ${{ runner.os }}-build-${{ env.cache-name }}-
           ${{ runner.os }}-build-
           ${{ runner.os }}-
+
+    - name: Install dependencies
+      run: |
+        cabal update
+        cabal build --only-dependencies --enable-tests --enable-benchmarks
+    - name: Build
+      run: cabal build
+    - name: Run tests
+      run: cabal test
+
+  build-macos:
+    name: macOS (latest)
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-haskell@v1
+      with:
+        ghc-version: '9.14.1'
+        cabal-version: '3.16.1.0'
+
+    - name: Cache
+      uses: actions/cache@v3
+      env:
+        cache-name: cache-cabal
+      with:
+        path: ~/.cabal
+        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}
+        restore-keys: |
+          ${{ runner.os }}-build-${{ env.cache-name }}-
+          ${{ runner.os }}-build-
+          ${{ runner.os }}-
+
+    - name: Install GNU coreutils
+      run: brew install coreutils
 
     - name: Install dependencies
       run: |
