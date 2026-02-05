@@ -47,9 +47,6 @@ jobs:
     - name: Run tests
       run: cabal test
 
-    - name: Install UPX
-      if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-      run: sudo apt-get update && sudo apt-get install -y upx
 
     - name: Prepare binary for release
       if: github.event_name == 'push' && github.ref == 'refs/heads/master'
@@ -58,7 +55,6 @@ jobs:
         cp $(cabal list-bin haskbox) release/haskbox
         chmod +x release/haskbox
         strip --strip-all release/haskbox
-        upx --ultra-brute release/haskbox
         tar -czvf release/haskbox-linux-x86_64.tar.gz -C release haskbox
         rm release/haskbox
 
